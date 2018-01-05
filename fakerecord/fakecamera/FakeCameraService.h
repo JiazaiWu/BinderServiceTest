@@ -3,6 +3,7 @@
 
 #include <binder/BinderService.h>
 #include "../common/IFakeCameraService.h"
+#include "../common/IFakeCameraProxyListener.h"
 #include <mutex>
 #include <thread>
 
@@ -20,17 +21,19 @@ public:
 
     virtual int    getFrame();
     virtual void   stopFrame();
+    virtual void   setListener(const sp<IFakeCameraProxyListener>& listener);
 
     virtual status_t    onTransact(uint32_t code, const Parcel& data, Parcel* reply,
                                 uint32_t flags);
 
 private:
-	virtual void startAddFrame();
+	virtual void   startAddFrame();
 	virtual void   addAndshowFrame();
     std::mutex     mLock;
-    std::thread t;
+    std::thread    t;
     bool           mStart;
     int            numFrame;
+    sp<IFakeCameraProxyListener>  mListener;
 };
 }
 

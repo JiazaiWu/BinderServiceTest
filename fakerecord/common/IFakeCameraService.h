@@ -7,11 +7,15 @@
 
 namespace android {
 
+/*make build pass*/
+class IFakeCameraProxyListener;
+
 class IFakeCameraService: public IInterface{
 public:
     DECLARE_META_INTERFACE(FakeCameraService);
 
     virtual int getFrame() = 0; 
+    virtual void setListener(const sp<IFakeCameraProxyListener>& listener) = 0;
 };
 
 class BnFakeCameraService: public BnInterface<IFakeCameraService>
