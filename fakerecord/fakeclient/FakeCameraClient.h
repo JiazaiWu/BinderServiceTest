@@ -3,6 +3,8 @@
 
 #include <thread>
 #include <mutex>
+#include <binder/IMemory.h>
+#include <list>
 #include "../common/IFakeCameraProxyListener.h"
 
 namespace android {
@@ -12,7 +14,7 @@ class FakeCameraClient: public RefBase
 public:
     FakeCameraClient();
     virtual ~FakeCameraClient();
-    virtual void showFrame();
+    virtual void showFrame_loop();
     virtual void linkToServer();
 protected:
     class ProxyListener: public BnFakeCameraProxyListener
@@ -27,9 +29,15 @@ protected:
     virtual void callBackFrame(int numFrame);
 
 private:
+    // Memory used to send the buffers to encoder, where sp<IMemory> stores VideoNativeMetadata.
+    sp<IMemoryHeap> mMemoryHeapBase;
+    std::list<sp<IMemory>> mMemoryBases;
+
+    std::list<sp<IMemory>> mFramesReceived;
+
+    void createVideoBufferMemoryHeap(size_t size, uint32_t bufferCount);
     std::mutex mLock;
     std::thread t;
-    int mFrame;
     sp<IFakeCameraService>   mServer;
 };
 

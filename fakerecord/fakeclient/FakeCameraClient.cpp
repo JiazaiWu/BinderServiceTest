@@ -5,6 +5,8 @@
 #include <binder/IServiceManager.h>
 #include "../fakecamera/FakeCameraService.h"
 #include <binder/IPCThreadState.h>
+#include <binder/MemoryBase.h>
+#include <binder/MemoryHeapBase.h>
 #include "FakeCameraClient.h"
 
 namespace android {
@@ -21,10 +23,10 @@ void FakeCameraClient::ProxyListener::callBackFrame(int numFrame)
 	mClient->callBackFrame(numFrame);
 }
 
-FakeCameraClient::FakeCameraClient():
-	mFrame(0)
+FakeCameraClient::FakeCameraClient()
 {
 	ALOGE("jiazai FakeCameraClient");
+	createVideoBufferMemoryHeap(sizeof(int), 16);
 	sp<IServiceManager> sm = defaultServiceManager();
     if (sm == NULL) {
         ALOGE("jiazai SerivceManager is NULL !!!!");
@@ -41,7 +43,7 @@ FakeCameraClient::FakeCameraClient():
         ALOGE("jiazai get interface failed");
         return;
     }
-    t = std::thread([](FakeCameraClient* odj){odj->showFrame();}, this);
+    t = std::thread([](FakeCameraClient* odj){odj->showFrame_loop();}, this);
 }
 
 FakeCameraClient::~FakeCameraClient()
@@ -49,10 +51,18 @@ FakeCameraClient::~FakeCameraClient()
 	ALOGE("jiazai FakeCameraClient release");
 }
 
+void FakeCameraClient::createVideoBufferMemoryHeap(size_t size, uint32_t bufferCount) {
+    mMemoryHeapBase = new MemoryHeapBase(size * bufferCount, 0,
+            "Fake-CameraSource-BufferHeap");
+    for (uint32_t i = 0; i < bufferCount; i++) {
+        mMemoryBases.push_back(new MemoryBase(mMemoryHeapBase, i * size, size));
+    }
+}
+
 void FakeCameraClient::linkToServer()
 {
 	ALOGE("jiazai strong count %d before linkToServer", getStrongCount());
-	mServer->setListener(new ProxyListener	(this));
+	mServer->setListener(new ProxyListener(this));
 	ALOGE("jiazai strong count %d after linkToServer", getStrongCount());
 }
 
@@ -60,13 +70,30 @@ void FakeCameraClient::callBackFrame(int numFrame)
 {
 	ALOGE("jiazai client get callback %d", numFrame);
 	std::lock_guard<std::mutex>  temp_lock(mLock);
-	mFrame = numFrame;
+	while (mMemoryBases.empty()) {
+		ALOGE("jiazai share memory empty");
+		return;
+	}
+	sp<IMemory> data = *mMemoryBases.begin();
+    mMemoryBases.erase(mMemoryBases.begin());
+    int *frameData = (int*)(data->pointer());
+    *frameData = numFrame;
+    mFramesReceived.push_back(data);
 }
 
-void FakeCameraClient::showFrame() {
+void FakeCameraClient::showFrame_loop() {
 	while(true) {
+		while (mFramesReceived.empty()) {
+			ALOGE("jiazai Received memory empty");
+			std::this_thread::sleep_for(std::chrono::seconds(1));
+			continue;
+		}
 		mLock.lock();
-		ALOGE("jiazai client frame %d", mFrame);
+		sp<IMemory> data = *mFramesReceived.begin();
+		int *frameData = (int*)(data->pointer());
+		ALOGE("jiazai client frame %d", *frameData);
+		mMemoryBases.push_back(data);
+		mFramesReceived.erase(mFramesReceived.begin());
 		mLock.unlock();
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
@@ -85,7 +112,8 @@ int main(int argc, char** argv)
 
 	/* neccessary for binder transfer.....*/
 	ProcessState::self()->startThreadPool();
-    IPCThreadState::self()->joinThreadPool();
+	/* not quit*/
+	IPCThreadState::self()->joinThreadPool();
 
 	return 0;
 }
