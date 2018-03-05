@@ -43,6 +43,8 @@ FakeCameraClient::FakeCameraClient()
         ALOGE("jiazai get interface failed");
         return;
     }
+    mDeathNotifier = new DeathNotifier();
+    IInterface::asBinder(mServer)->linkToDeath(mDeathNotifier);
     t = std::thread([](FakeCameraClient* odj){odj->showFrame_loop();}, this);
 }
 
@@ -85,6 +87,10 @@ void FakeCameraClient::showFrame_loop() {
 	while(true) {
 		while (mFramesReceived.empty()) {
 			ALOGE("jiazai Received memory empty");
+			if (!IInterface::asBinder(mServer)->isBinderAlive()) {
+				ALOGW("camera recording proxy is gone");
+				return;
+			}
 			std::this_thread::sleep_for(std::chrono::seconds(1));
 			continue;
 		}
@@ -97,6 +103,10 @@ void FakeCameraClient::showFrame_loop() {
 		mLock.unlock();
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 	}
+}
+
+void FakeCameraClient::DeathNotifier::binderDied(const wp<IBinder>& who __unused) {
+    ALOGI("Camera recording proxy died");
 }
 
 }

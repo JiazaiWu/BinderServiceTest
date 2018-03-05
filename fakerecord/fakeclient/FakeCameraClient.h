@@ -26,6 +26,12 @@ protected:
         sp<FakeCameraClient> mClient;
     };
 
+    class DeathNotifier: public IBinder::DeathRecipient {
+    public:
+        DeathNotifier() {}
+        virtual void binderDied(const wp<IBinder>& who);
+    };
+
     virtual void callBackFrame(int numFrame);
 
 private:
@@ -39,6 +45,7 @@ private:
     std::mutex mLock;
     std::thread t;
     sp<IFakeCameraService>   mServer;
+    sp<DeathNotifier> mDeathNotifier;
 };
 
 }
